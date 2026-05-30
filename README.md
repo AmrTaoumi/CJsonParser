@@ -1,0 +1,1 @@
+A minimal JSON parser written in C as a learning exercise.
