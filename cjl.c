@@ -23,9 +23,7 @@ int count_ze_nodes(struct linkedlist header)
 }
 int read_list(char *json, struct linkedlist* list)
 {
-    //used to be twitter
     int x;
-    // AMERRRICAAAAAAAA
     int state = 0;
     size_t length = 0;
     size_t i = 0;
