@@ -1,0 +1,44 @@
+Goal: Get read_list to correctly parse a JSON-style array of integers into a doubly-linked list, with no undefined behavior, no leaks, and a consistent memory-ownership model, verified by tests.
+
+Step 1 — Decide the ownership model first, before touching anything else
+Right now the head node is caller-allocated (stack variable in main) but every subsequent node is heap-allocated inside read_list.
+ That mismatch is the root of several other bugs. Decide: should read_list always heap-allocate every node (including the head, returned via a struct linkedlist ** out-parameter),
+  or should the caller always supply a valid head node? Pick one and make every function consistent with it. This decision affects how you free the list later.
+
+Step 2 — Fix create_node
+It mallocs and sets fields but never returns the pointer. Right now its return value is garbage/undefined.
+ Also notice it's currently unused by read_list — decide whether read_list should actually call create_node for new nodes instead of duplicating the malloc logic inline, for consistency.
+
+Step 3 — Fix the uninitialized prev on the head node
+In main, list is declared with no initialization, so list.prev is garbage. Any code path that dereferences current->prev on the head node (e.g. an empty array [], or a leading comma) will crash or corrupt memory.
+ The head node's prev must be explicitly set to NULL before parsing begins, regardless of which ownership model you picked in Step 1.
+
+Step 4 — Fix the non-null-terminated buffer bug
+Both the , and ] cases malloc(length) and memcpy exactly length bytes, then pass that buffer to sscanf("%d", ...) and strspn.
+ Neither function knows where the buffer ends — there's no terminating \0. This is undefined behavior (it may "work" by luck on your stack but is not safe).
+  Allocate length + 1 bytes and explicitly terminate the buffer before using it as a string.
+
+Step 5 — Fix the buffer memory leaks
+In the ] case, when sscanf fails and the content isn't whitespace, you print an error but never free buff.
+ In the whitespace-only success branch, buff is also never freed. Every malloc needs a matching free on every code path, including error paths.
+
+Step 6 — Handle malformed/edge-case input explicitly
+Trace through and decide expected behavior for: empty array [], leading comma [,1], multiple consecutive commas [1,,2], non-numeric tokens [1,abc,2],
+ missing closing bracket, and an array with only whitespace [   ]. Right now some of these will crash, some will silently corrupt the list. Write down what should happen for each before coding it.
+
+Step 7 — Check malloc return values
+None of the malloc calls (in create_node or read_list) check for NULL.
+ Decide what read_list should do if allocation fails mid-parse (return an error code and free what's been built so far, most likely).
+
+Step 8 — Fix count_ze_nodes's signature
+It takes struct linkedlist header by value, which copies the whole struct just to read it — wasteful and confusing given everything else in this codebase uses pointers.
+ Change it to take a pointer, and update the header declaration and the call in main to match.
+
+Step 9 — Write a free_list (or destroy_list) function
+Nothing currently frees the list once built; main leaks every node. Write a traversal that frees each node,
+ consistent with whatever ownership model you picked in Step 1 (don't free a stack-allocated head node).
+
+Step 10 — Test rigorously
+Write small test cases for each scenario from Step 6, and run the whole thing under Valgrind or AddressSanitizer (-fsanitize=address,undefined)
+ — given the buffer and pointer issues here, the sanitizers will catch problems your eyes won't.
+Work through these roughly in order, since several later steps (testing, freeing) depend on the ownership decision in Step 1 being settled first.
